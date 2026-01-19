@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "zmfh"
+version = "1.0.0.post1"
+description = "ZMFH: Python import governance layer (fail-open by default)."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { file = "LICENSE" }
+authors = [{ name = "ZMFH contributors" }]
+keywords = ["import", "governance", "resolver", "policy", "bootstrap", "meta_path"]
+
+[project.urls]
+Homepage = "https://pypi.org/project/zmfh/"

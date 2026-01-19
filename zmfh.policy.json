@@ -1,0 +1,4 @@
+﻿{
+  "mode": "strict",
+  "deny": ["requests", "numpy"]
+}

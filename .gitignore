@@ -1,0 +1,13 @@
+
+.pypi_token.txt
+
+.pypi_token.txt
+.release/
+.smoke/
+dist/
+build/
+__pycache__/
+*.pyc
+
+.pypirc*
+.pypi_token.txt

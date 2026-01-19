@@ -1,0 +1,3 @@
+ZMFH is a Python import governance layer for observing, controlling, and validating module imports without breaking existing environments.
+It defaults to fail-open behavior, while supporting strict policy-based blocking of imports, including installed packages.
+ZMFH provides clear diagnostics for deleted or moved modules, automatic bootstrapping, and CLI tools for safe refactoring, security, and reproducible projects
