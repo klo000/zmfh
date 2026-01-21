@@ -16,6 +16,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import textwrap
 from pathlib import Path
 
 
@@ -62,10 +63,26 @@ def cmd_selftest() -> int:
     checks: list[tuple[str, bool, str]] = []
 
     # 1) Deny enforce blocks a module that Python could otherwise import.
-    code_deny = (
-        "import sys, importlib; sys.path.insert(0, r'" + str(root) + "'); "
-        "try: importlib.import_module('denyme'); print('IMPORTED'); "
-        "except Exception as e: print(type(e).__name__); print(str(e).splitlines()[0][:200])"
+    root_repr = repr(str(root))
+    ghost_repr = repr(str(root / "ghostmod.py"))
+
+    code_deny = textwrap.dedent(
+        f"""
+        import importlib
+        import sys
+
+        import zmfh
+
+        sys.path.insert(0, {root_repr})
+        zmfh.bootstrap()
+
+        try:
+            importlib.import_module("denyme")
+            print("IMPORTED")
+        except Exception as e:
+            print(type(e).__name__)
+            print(str(e).splitlines()[0][:200])
+        """
     )
     rc, out, err = _run_py(code_deny, env=base_env)
     ok = ("ModuleNotFoundError" in out) and ("ZMFH" in out)
@@ -73,12 +90,29 @@ def cmd_selftest() -> int:
 
     # 2) Deletion message for a module under root that used to resolve.
     (root / "ghostmod.py").write_text("X=1\n", encoding="utf-8")
-    code_del = (
-        "import os, sys, importlib; sys.path.insert(0, r'" + str(root) + "'); "
-        "importlib.import_module('ghostmod'); os.remove(r'" + str(root / "ghostmod.py") + "'); "
-        "sys.modules.pop('ghostmod', None); importlib.invalidate_caches(); "
-        "try: importlib.import_module('ghostmod'); print('IMPORTED'); "
-        "except Exception as e: print(type(e).__name__); print(str(e).splitlines()[0][:200])"
+    code_del = textwrap.dedent(
+        f"""
+        import importlib
+        import os
+        import sys
+
+        import zmfh
+
+        sys.path.insert(0, {root_repr})
+        zmfh.bootstrap()
+
+        importlib.import_module("ghostmod")
+        os.remove({ghost_repr})
+        sys.modules.pop("ghostmod", None)
+        importlib.invalidate_caches()
+
+        try:
+            importlib.import_module("ghostmod")
+            print("IMPORTED")
+        except Exception as e:
+            print(type(e).__name__)
+            print(str(e).splitlines()[0][:200])
+        """
     )
     rc2, out2, err2 = _run_py(code_del, env=base_env)
     ok2 = ("ModuleNotFoundError" in out2) and ("ZMFH" in out2)
@@ -94,8 +128,5 @@ def cmd_selftest() -> int:
     return 0 if all_ok else 1
 
 
-# --- alias for cli/main.py ---
-
-def cmd_selftest():
-    return main()
+__all__ = ["cmd_selftest"]
 

@@ -151,8 +151,39 @@ def cmd_policy_check(fullname: str, *, pretty: bool = True) -> int:
         return 1
 
 
-# --- alias for cli/main.py ---
+def cmd_policy(args) -> int:
+    """Dispatcher for `zmfh policy ...`.
 
-def cmd_policy(args):
-    return main(args)
+    `cli/main.py` routes all `policy` invocations here.
+    """
+
+    action = getattr(args, "action", None)
+    if action in (None, "show"):
+        return cmd_policy_show(pretty=True)
+
+    if action == "validate":
+        path = getattr(args, "path", None)
+        if not path:
+            # argparse makes this optional; treat missing as usage error.
+            _json_print({"valid": False, "errors": ["missing path"], "path": None}, pretty=True)
+            return 2
+        return cmd_policy_validate(path, pretty=True)
+
+    if action == "check":
+        fullname = getattr(args, "module", None)
+        if not fullname:
+            _json_print({"error": "missing module"}, pretty=True)
+            return 2
+        return cmd_policy_check(fullname, pretty=True)
+
+    _json_print({"error": f"unknown policy action: {action}"}, pretty=True)
+    return 2
+
+
+__all__ = [
+    "cmd_policy",
+    "cmd_policy_show",
+    "cmd_policy_validate",
+    "cmd_policy_check",
+]
 

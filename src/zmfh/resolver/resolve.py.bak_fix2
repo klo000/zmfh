@@ -1,0 +1,120 @@
+"""Resolution orchestration."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from importlib.machinery import ModuleSpec
+from typing import Iterable, Sequence
+
+from zmfh.policy.decision import decide
+from zmfh.policy.model import Policy
+from zmfh.registry.cache import Cached, drop, get as cache_get, put
+from zmfh.registry.index import get_index, invalidate as invalidate_index
+from zmfh.registry.scan import Candidate
+from zmfh.resolver.fallback import UNHANDLED, python_find_spec
+from zmfh.resolver.keyspace import is_supported_fullname
+from zmfh.resolver.spec_factory import make_spec
+from zmfh.resolver.verify import verify_candidate
+from zmfh.runtime.origins_cache import record, vanished_under_roots
+
+last = vanished_under_roots(fullname, roots)
+if last:
+    raise ModuleNotFoundError(
+        f"ZMFH: import '{fullname}' used to resolve under root, but the file vanished (last known: {last})."
+    )
+
+@dataclass(frozen=True)
+class Resolved:
+    spec: ModuleSpec
+    candidate: Candidate
+
+
+@dataclass(frozen=True)
+class Deleted:
+    fullname: str
+    last_known_paths: Sequence[str]
+
+
+def _pick_unique(cands: Sequence[Candidate]) -> Candidate | None:
+    if len(cands) == 1:
+        return cands[0]
+    return None
+
+
+def resolve(
+    fullname: str,
+    *,
+    root: str,
+    policy: Policy,
+    exclude_dirs: Iterable[str],
+    max_files: int,
+    path=None,
+):
+    # v0.1: only top-level identifiers
+    if not is_supported_fullname(fullname):
+        return UNHANDLED
+
+    d = decide(fullname, policy)
+    if not d.handle:
+        return UNHANDLED
+
+    # Never override Python when Python can resolve.
+    if python_find_spec(fullname, path) is not None:
+        return UNHANDLED
+
+    # Cache fast-path
+    cached = cache_get(fullname)
+    last_known_paths: list[str] = []
+    if cached is not None:
+        ok, fp = verify_candidate(cached.candidate)
+        if ok and cached.fp is not None and fp is not None and fp == cached.fp:
+            spec = make_spec(fullname, cached.candidate)
+            if spec is not None:
+                return Resolved(spec=spec, candidate=cached.candidate)
+        # Keep last-known location so we can emit deterministic deletion diagnostics
+        # when the module used to be resolvable under the managed root but is now missing.
+        try:
+            last_known_paths.append(cached.candidate.path)
+        except Exception:
+            pass
+        drop(fullname)
+
+    # Build/refresh registry index
+    idx = get_index(root, exclude_dirs=exclude_dirs, max_files=max_files)
+    cands = idx.get_candidates(fullname)
+
+    picked = _pick_unique(cands)
+    if picked is None:
+        # ambiguous or missing
+        if last_known_paths and getattr(policy, "raise_on_deleted", True):
+            return Deleted(fullname=fullname, last_known_paths=last_known_paths)
+        return UNHANDLED
+
+    ok, fp = verify_candidate(picked)
+    if not ok:
+        # Might have moved: rescan once
+        invalidate_index()
+        idx2 = get_index(root, exclude_dirs=exclude_dirs, max_files=max_files, allow_ttl_refresh=False)
+        cands2 = idx2.get_candidates(fullname)
+        picked2 = _pick_unique(cands2)
+        if picked2 is None:
+            return UNHANDLED
+
+        ok2, fp2 = verify_candidate(picked2)
+        if not ok2:
+            if getattr(policy, "raise_on_deleted", True):
+                return Deleted(fullname=fullname, last_known_paths=[picked.path, picked2.path])
+            return UNHANDLED
+
+        spec2 = make_spec(fullname, picked2)
+        if spec2 is None:
+            return UNHANDLED
+        put(fullname, Cached(candidate=picked2, fp=fp2))
+        return Resolved(spec=spec2, candidate=picked2)
+
+    spec = make_spec(fullname, picked)
+    if spec is None:
+        return UNHANDLED
+
+    put(fullname, Cached(candidate=picked, fp=fp))
+    return Resolved(spec=spec, candidate=picked)

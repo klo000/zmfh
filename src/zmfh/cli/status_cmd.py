@@ -37,8 +37,5 @@ def cmd_status(*, pretty: bool = True) -> int:
     return 0
 
 
-# --- alias for cli/main.py ---
-
-def cmd_status():
-    return main()
+__all__ = ["cmd_status"]
 

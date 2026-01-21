@@ -35,7 +35,7 @@ def _tail_lines(path: Path, n: int) -> List[str]:
         return []
 
 
-def cmd_trace(*, tail: int = 50, pretty: bool = False) -> int:
+def cmd_trace_show(*, tail: int = 50, pretty: bool = False) -> int:
     _safe_bootstrap()
 
     try:
@@ -111,8 +111,20 @@ def cmd_trace_clear() -> int:
         return 1
 
 
-# --- alias for cli/main.py ---
+def cmd_trace(args) -> int:
+    """Dispatcher for `zmfh trace ...`.
 
-def cmd_trace(args):
-    return main(args)
+    `cli/main.py` routes all `trace` invocations here.
+    """
+
+    action = getattr(args, "action", None)
+    if action == "clear":
+        return cmd_trace_clear()
+
+    # default: show (tail)
+    tail = int(getattr(args, "tail", 50) or 50)
+    return cmd_trace_show(tail=tail, pretty=False)
+
+
+__all__ = ["cmd_trace", "cmd_trace_show", "cmd_trace_clear"]
 
